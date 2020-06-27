@@ -1,4 +1,5 @@
 const db = require("../connection");
+const moment = require("moment");
 const { uploader } = require("../helper/uploader");
 const fs = require("fs");
 
@@ -7,109 +8,69 @@ module.exports = {
     let sql = `SELECT * FROM data_product`;
     db.query(sql, (err, result) => {
       if (err) res.status(500).send(err);
-      console.log(result);
+      // console.log(result);
 
       res.status(200).send({ dataProduct: result });
     });
   },
 
   postProduct: (req, res) => {
-    // const path = "/user/images";
-    // const upload = uploader(path, "ImageProduct").fields([{ name: "image" }]);
-    // upload(req, res, err => {
-    //   if (err)
-    //     res
-    //       .status(500)
-    //       .json({ message: "Upload Picture Failed", error: err.message });
-    //   const { image } = req.files;
-    //   let imagePath = [];
-    //   if (image) {
-    //     image.forEach(image => {
-    //       imagePath.push(path + "/" + image.fileName);
-    //     });
-    //   }
-    //   const data = JSON.parse(req.body.data);
-    //   try {
-    //     let sql = "INSERT INTO data_product SET ?";
-    //     db.query(sql, data, (err, resProduct) => {
-    //       if (err)
-    //         res
-    //           .status(500)
-    //           .json({
-    //             message: "Upload data product failed",
-    //             error: err.message
-    //           });
-    //       let arrImages = [];
-    //       imagePath.forEach(image => {
-    //         arrImages.push([resProduct, image]);
-    //       });
-    //       let sql = `SELECT * FROM data_product`;
-    //       db.query(sql, [arrImages], (err, resImage) => {
-    //         if (err)
-    //           res
-    //             .status(500)
-    //             .json({ message: "upload product failed", error: err.message });
-    //         res.status(200).send({ dataProduct: resImage });
-    //       });
-    //     });
-    //   } catch (err) {
-    //     console.log(err);
-    //     image && imagePath.forEach(image => fs.unlinkSync("./public" + image));
-    //     return res
-    //       .status(500)
-    //       .json({
-    //         message:
-    //           "there's something error on your server. please contact administrator"
-    //       });
-    //   }
-    // });
-    // ====================================================================
-    try {
-      const upload = uploader(path, "ImageProduct").fields([{ name: "image" }]);
-      upload(req, res, err => {
-        if (err) {
-          return res
-            .status(500)
-            .json({ message: "upload gagal", error: err.message });
-        }
-        const { image } = req.files;
-        const imagePath = [];
-        const data = JSON.parse(req.body.data);
-        image1 = data.image1;
-        image2 = data.image2;
-        const images = [...image1, ...image2];
-        if (image) {
-          images.forEach(images => {
-            imagePath.push(images ? path + "/" + image.fileName : null);
-          });
-        }
-        // const { image } = req.files;
-        // const data = JSON.parse(req.body.data);
-        // console.log(image);
-        // if (image) {
-        //   for (let i = 0; i < image.length; i++) {
-        //     data[`image${i + 1}`] = path + "/" + image[i].filename;
-        //   }
-        // }
+    const path = "/user/images";
+
+    const upload = uploader(path, "ImageProduct").fields([{ name: "image" }]);
+    upload(req, res, (err) => {
+      if (err) {
+        return res.status(500).json({ message: "upload gagal", error: err.message });
+      }
+      const { image } = req.files;
+      const imagePath = [];
+      // save the imagepath and original filename to array
+      if (image) {
+        image.forEach((image) => {
+          imagePath.push(path + "/" + image.filename);
+        });
+      }
+
+      const data = JSON.parse(req.body.data);
+      data.iat = moment().format("YYYY-MM-DD HH:mm:ss");
+      data.image1 = imagePath[0];
+      data.image2 = imagePath[1];
+
+      try {
         var sql = "INSERT INTO data_product SET ?";
         db.query(sql, data, (err, result) => {
           if (err) {
-            log(err.message);
+            console.log(err.message);
             return res.status(500).json({
               message: "there's an error on the server",
-              error: err.message
+              error: err.message,
             });
           }
-          sql = `SELECT * FROM data_product`;
-          db.query(sql, (err, result1) => {
-            if (err) res.status(500).send(err);
-            res.status(200).send({ dataProduct: result1 });
+
+          // merge images' upload path with the last inserted ID Product in new array
+          let arrImages = [];
+          imagePath.forEach((image) => {
+            arrImages.push([result.insertId, image]);
+          });
+
+          // insert images' path to database
+          let sql = `INSERT INTO product_images (product_id, image) VALUES ?`;
+          db.query(sql, [arrImages], (err, resImage) => {
+            if (err) res.status(500).json({ message: "Upload images failed!", error: err.message });
+
+            // if INSERT success, get all of the product with the same storeid
+            let sql = `SELECT * FROM data_product`;
+            db.query(sql, (err, result1) => {
+              if (err) res.status(500).send(err);
+              res.status(200).send({ dataProduct: result1 });
+            });
           });
         });
-      });
-    } catch (error) {
-      res.send(error);
-    }
+      } catch (error) {
+        image && imagePath.forEach((image) => fs.unlinkSync("./public" + image));
+        res.send(error);
+      }
+    });
   },
 
   editProduct: (req, res) => {
@@ -119,14 +80,12 @@ module.exports = {
       if (err) throw err;
       if (results.length) {
         const path = "/user/images";
-        const upload = uploader(path, "ImageProduct").fields([
-          { name: "image" }
-        ]);
-        upload(req, res, err => {
+        const upload = uploader(path, "ImageProduct").fields([{ name: "image" }]);
+        upload(req, res, (err) => {
           if (err) {
             return res.status(500).json({
               message: "there's something error on your server",
-              error: err.message
+              error: err.message,
             });
           }
           const { image } = req.files;
@@ -146,7 +105,7 @@ module.exports = {
                 }
                 return res.status(500).json({
                   message: "there's an error on the server",
-                  error: err.message
+                  error: err.message,
                 });
               }
               if (imagePath) {
@@ -164,7 +123,7 @@ module.exports = {
             console.log(err.message);
             return res.status(500).json({
               message: "there's an error",
-              error: err.message
+              error: err.message,
             });
           }
         });
@@ -179,7 +138,7 @@ module.exports = {
         console.log(err.message);
         return res.status(500).json({
           message: "there's an error on the server",
-          err: err.message
+          err: err.message,
         });
       }
       console.log(result);
@@ -189,7 +148,7 @@ module.exports = {
         res.status(200).send({ dataProduct: result2 });
       });
     });
-  }
+  },
 };
 
 // postProduct: (req, res) => {

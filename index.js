@@ -2,13 +2,14 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+require("dotenv").config();
 
 // setting app
 const app = express();
 
 // test connection database
 const db = require("./connection");
-db.connect(err => {
+db.connect((err) => {
   if (err) throw err;
   console.log("my sql connected");
 });
